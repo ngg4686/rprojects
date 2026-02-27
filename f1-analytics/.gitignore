@@ -1,0 +1,39 @@
+# Data files
+data/raw/
+data/processed/
+data/cache/
+
+# Model checkpoints
+models/checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Experiment tracking
+mlruns/
+wandb/
