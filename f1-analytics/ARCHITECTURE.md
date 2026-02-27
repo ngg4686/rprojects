@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-Python project for Formula 1 data analysis combining statistical analysis and deep learning. Pulls from multiple F1 data sources, builds a clean data pipeline, and provides a foundation for both exploratory statistical analysis and deep learning experiments.
+Hypothesis-driven F1 prediction system. Pulls from multiple data sources, builds testable hypotheses about race outcomes, generates pre-race predictions, scores them against reality, and iteratively improves. Combines statistical analysis and deep learning with a concrete feedback loop.
 
 ## Directory Structure
 
@@ -18,10 +18,14 @@ f1-analytics/
 │   ├── raw/                 # Raw downloaded data + API caches
 │   ├── processed/           # Cleaned parquet files
 │   └── cache/               # FastF1 cache directory
+├── predictions/
+│   ├── history/             # JSON prediction records per race
+│   └── reports/             # Markdown pre-race prediction reports
 ├── notebooks/
 │   ├── 01_data_exploration.ipynb
 │   ├── 02_statistical_analysis.ipynb
-│   └── 03_deep_learning.ipynb
+│   ├── 03_deep_learning.ipynb
+│   └── 04_predictions.ipynb     # Prediction workflow & scorecard
 ├── src/
 │   ├── __init__.py
 │   ├── data/
@@ -41,11 +45,18 @@ f1-analytics/
 │   │   ├── lap_predictor.py      # Lap time prediction model
 │   │   ├── driver_classifier.py  # Driving style classification
 │   │   └── training.py           # Training loops and utilities
-│   └── visualization/
+│   ├── visualization/
+│   │   ├── __init__.py
+│   │   ├── track_plots.py        # Circuit visualizations
+│   │   ├── telemetry_plots.py    # Telemetry trace plots
+│   │   └── dashboard.py          # Summary dashboard generation
+│   └── predictions/
 │       ├── __init__.py
-│       ├── track_plots.py        # Circuit visualizations
-│       ├── telemetry_plots.py    # Telemetry trace plots
-│       └── dashboard.py          # Summary dashboard generation
+│       ├── hypotheses.py         # Testable F1 hypotheses
+│       ├── registry.py           # Prediction storage and resolution
+│       ├── scorecard.py          # Accuracy tracking and calibration
+│       ├── backtester.py         # Historical validation engine
+│       └── race_predictor.py     # Race weekend prediction orchestrator
 ├── models/
 │   └── checkpoints/              # Saved model weights
 └── tests/
@@ -123,6 +134,82 @@ f1-analytics/
 - **Architecture**: XGBoost baseline, then MLP/attention model
 - **Evaluation**: Ranked probability score
 
+## Prediction System (`src/predictions/`)
+
+The core feedback loop of the project. Instead of just analyzing data, the system
+generates concrete, testable predictions before each race and scores them after.
+
+### How It Works
+
+1. **Hypotheses** define testable questions with data-driven prediction logic
+2. **Backtester** validates hypotheses against historical data (train on 2018-2022, test on 2023-2024)
+3. **RacePredictor** generates pre-race predictions for every hypothesis
+4. **Registry** stores every prediction with its reasoning and confidence
+5. **Scorecard** tracks accuracy over time, shows calibration, identifies which hypotheses work
+
+### Hypotheses (`src/predictions/hypotheses.py`)
+
+| Hypothesis | Question | Key Signals |
+|------------|----------|-------------|
+| `PoleWinnerHypothesis` | Will the pole sitter win? | Circuit conversion rate, weather risk |
+| `RetirementRiskHypothesis` | Which drivers will DNF? | Team reliability, driver history, circuit type |
+| `SafetyCarHypothesis` | Will there be a safety car? | Street circuit, weather, historical rate |
+| `UndercutHypothesis` | Will undercutting be effective? | Pit loss time, tire degradation rate |
+| `WetWeatherUpsetHypothesis` | Will rain cause a major upset? | Rain probability, historical upsets |
+| `FirstLapIncidentHypothesis` | Will there be a lap-1 incident? | Circuit T1 risk, qualifying spread |
+| `TireStrategyHypothesis` | 1-stop or 2-stop optimal? | Track temp, race length, circuit history |
+
+Each hypothesis:
+- Learns from historical data (base rates, circuit-specific patterns)
+- Outputs a prediction with confidence score and reasoning
+- Can be evaluated against the actual outcome
+- Tracks its own accuracy trend over time
+
+### Registry (`src/predictions/registry.py`)
+
+Persistent JSON store. Every prediction gets a unique ID and is saved with:
+- The prediction itself (value, confidence, reasoning)
+- The hypothesis that generated it
+- The actual outcome (filled in post-race)
+- Whether it was correct
+
+### Scorecard (`src/predictions/scorecard.py`)
+
+Answers: "Are we getting better?" Provides:
+- Accuracy per hypothesis
+- Calibration plot (is 70% confidence actually right 70% of the time?)
+- Cumulative accuracy trend
+- Per-hypothesis rolling accuracy
+
+### Backtester (`src/predictions/backtester.py`)
+
+Validates hypotheses before trusting them. Runs each hypothesis through
+historical races and builds a track record. If a hypothesis can't beat
+50% on historical data, it needs rework before going live.
+
+### Race Predictor (`src/predictions/race_predictor.py`)
+
+Orchestrates the full workflow:
+- `predict_race()` — runs all hypotheses, records predictions, saves markdown report
+- `resolve_race()` — scores predictions against outcomes
+- `build_pre_race_data()` — assembles qualifying, weather, circuit data
+- `build_post_race_outcomes()` — extracts outcomes from results
+- `season_report()` — generates season performance summary
+
+### The Feedback Loop
+
+```
+Historical Data → Backtest → Identify strong hypotheses
+                                    ↓
+Upcoming Race → Pre-race data → Predict → Record
+                                              ↓
+Race Happens → Outcomes → Resolve → Scorecard
+                                        ↓
+                              Recalibrate / Add new hypotheses
+                                        ↓
+                              Next Race (repeat)
+```
+
 ## Training Infrastructure (`src/models/training.py`)
 
 - **Trainer class**: Train/val loop with early stopping, LR scheduling (ReduceLROnPlateau)
@@ -145,6 +232,9 @@ f1-analytics/
 4. Start with `notebooks/01_data_exploration.ipynb` for EDA
 5. Run `02_statistical_analysis.ipynb` for tire degradation and clustering
 6. Train models in `03_deep_learning.ipynb`
+7. **Run `04_predictions.ipynb`** — backtest hypotheses, generate predictions, review scorecard
+8. Before each race: run `RacePredictor.predict_race()` with qualifying and weather data
+9. After each race: run `RacePredictor.resolve_race()` and check the scorecard
 
 ## Notes
 
